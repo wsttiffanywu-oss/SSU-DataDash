@@ -13,6 +13,7 @@ Ideas to try:
 - words in the remarks, such as "renovated" or "needs work"
 - off-market and list-aware can use different features: list-aware has list_price
 """
+import numpy as np
 import pandas as pd
 
 PROPERTY_TYPES = ["Condo Apt", "Detached", "Semi-Detached", "Condo Townhouse",
@@ -28,10 +29,118 @@ def square_feet(house_area):
     return (low + high) / 2
 
 
-def off_market_features(homes):
-    """Features for homes with no list price."""
+def past_window_mean(homes, history, keys, days):
+    """For each home: the mean log price per sq ft of the history sales in its `keys` group
+    that closed in the `days` days before its `as_of` date, and how many there were.
+
+    `as_of` is never after the listing date, and a sale on the `as_of` day itself is not used.
+    The same rule applies to training rows and to the homes being predicted, so a training home
+    never sees its own sale or anything after it."""
+    mean = pd.Series(np.nan, index=homes.index)
+    count = pd.Series(0, index=homes.index)
+    past_groups = dict(list(history.groupby(keys)))
+    for key, rows in homes.groupby(keys):
+        past = past_groups.get(key)
+        if past is None:
+            continue
+        past = past.sort_values("date_sold")
+        dates = past["date_sold"].to_numpy()
+        cumulative = np.concatenate([[0.0], np.cumsum(past["log_ppsf"].to_numpy())])
+        as_of = rows["as_of"].to_numpy()
+        end = np.searchsorted(dates, as_of, side="left")
+        start = np.searchsorted(dates, as_of - np.timedelta64(days, "D"), side="left")
+        n = end - start
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean[rows.index] = np.where(n > 0, (cumulative[end] - cumulative[start]) / n, np.nan)
+        count[rows.index] = n
+    return mean, count
+
+
+def market_features(homes, history, training=False, max_staleness_days=0):
+    """How expensive the market around a home was just before it was listed, from past sales
+    only: mean log(price per sq ft) by community x type, community, and type city-wide.
+
+    The windows end at `as_of`. For a home to predict that is the listing date, or the day after
+    the last known sale if it was listed later (so the windows hold the latest data, not empty
+    months). Training homes always have data up to their listing date, unlike the test homes,
+    which are listed 0-4 months after the data ends. With max_staleness_days > 0, each training
+    home instead gets a random as_of 0 to max_staleness_days before its listing, and
+    `staleness_days` tells the model how old its market data is, so it can learn from 2021-2025
+    how far prices move while the data is that old."""
+    history = history.assign(
+        log_ppsf=np.log(history["sold_price"] / square_feet(history["house_area"])), all="all")
+    if training:
+        rng = np.random.default_rng(0)
+        lag = rng.integers(0, max_staleness_days + 1, len(homes)) if max_staleness_days else 0
+        as_of = homes["date_listed"] - pd.to_timedelta(lag, unit="D")
+    else:
+        as_of = homes["date_listed"].clip(upper=history["date_sold"].max() + pd.Timedelta(days=1))
+    homes = homes.assign(all="all", as_of=as_of)
+    X = pd.DataFrame(index=homes.index)
+    if max_staleness_days:
+        X["staleness_days"] = (homes["date_listed"] - homes["as_of"]).dt.days
+    groups = {"ct": ["community", "house_type_name"], "c": ["community"],
+              "t": ["house_type_name"], "city": ["all"]}
+    windows = {"ct": [91, 182, 365], "c": [91, 365], "t": [30, 91, 365], "city": [30, 91, 365]}
+    for name, keys in groups.items():
+        for days in windows[name]:
+            X[f"{name}_ppsf_{days}d"], n = past_window_mean(homes, history, keys, days)
+            if days == 365:
+                X[f"{name}_n_365d"] = n
+    # Recent momentum (last 3 months vs last 12) and the location premium over the type average.
+    X["t_momentum"] = X["t_ppsf_91d"] - X["t_ppsf_365d"]
+    X["city_momentum"] = X["city_ppsf_91d"] - X["city_ppsf_365d"]
+    X["ct_premium"] = X["ct_ppsf_365d"] - X["t_ppsf_365d"]
+    # A naive estimate: the neighbourhood's recent price per sq ft times this home's size.
+    X["ct_naive_log_price"] = X["ct_ppsf_182d"] + np.log(square_feet(homes["house_area"]))
+    return X
+
+
+# Phrases in the remarks, grouped by what they say about the home. Picked by reading which
+# words go with prices above or below the neighbourhood average in sales before June 2025
+# (before the dev months), then grouped by hand.
+REMARK_PATTERNS = {
+    "rm_renovated": r"fully (?:redone|renovated|updated)|completely (?:redone|renovated)|beautifully renovated"
+                    r"|renovated|turn-?key|move-in ready|gut(?:ted)? renovat",
+    "rm_luxury_finish": r"quartz|heated (?:bathroom )?floors|designer light|smooth ceilings|built-in appliances"
+                        r"|custom kitchen|frameless glass|spa-like|pot lights|wide-plank",
+    "rm_new_systems": r"new roof|high[- ]efficiency furnace|new central air|new windows|updated (?:electrical|plumbing)",
+    "rm_finished_basement": r"finished basement|renovated basement|rec room",
+    "rm_landscaped": r"landscaped",
+    "rm_dated": r"original (?:finishes|kitchen|condition|bathroom|cabinet)|\bdated\b|\bworn\b|\btired\b|older appliances"
+                r"|needs? (?:updating|work|tlc|some love)|personal touch|bring your (?:ideas|vision|imagination)",
+    "rm_major_repairs": r"needs? (?:significant|major|a new)|need replacing|waterproofing|near (?:the )?end of (?:its |their )?life"
+                        r"|older furnace|contractor|\brenovate\b|as-is|overgrown|handyman|structural|investor",
+    "rm_motivated": r"motivated|bring your offers?",
+}
+
+
+def remark_features(homes):
+    """0/1 columns for each group of phrases in REMARK_PATTERNS, plus a net condition score."""
+    text = homes["remarks"].fillna("").str.lower()
+    X = pd.DataFrame(index=homes.index)
+    for name, pattern in REMARK_PATTERNS.items():
+        X[name] = text.str.contains(pattern, regex=True).astype(int)
+    X["rm_condition_score"] = (X["rm_renovated"] + X["rm_luxury_finish"] + X["rm_new_systems"]
+                               - X["rm_dated"] - X["rm_major_repairs"])
+    X["rm_length"] = text.str.len()
+    return X
+
+
+def property_features(homes):
+    """What is known about the home itself and when it was listed."""
     X = pd.DataFrame(index=homes.index)
     X["square_feet"] = square_feet(homes["house_area"])
+    # Ranges ("900-1099") are a coarser report than an exact figure; let the model tell them apart.
+    X["area_is_range"] = homes["house_area"].astype(str).str.contains("-").astype(int)
+    # Lots exist only for freehold types; condos stay empty, which tree models handle.
+    X["lot_front"] = homes["lot_front"]
+    X["lot_depth"] = homes["lot_depth"]
+    X["lot_area"] = homes["lot_front"] * homes["lot_depth"]
+    X["garage"] = homes["garage"]
+    # Text columns: FeatureModel turns them into categories learned from the training sales.
+    X["house_style"] = homes["house_style"]
+    X["municipality"] = homes["municipality"]
     X["bedrooms"] = homes["bedrooms"]
     X["washrooms"] = homes["washrooms"]
     X["parking"] = homes["parking_total"]
@@ -39,14 +148,29 @@ def off_market_features(homes):
     X["longitude"] = homes["longitude"]
     # Months since January 2021, so the model can follow prices over time.
     X["months"] = (homes["date_listed"] - pd.Timestamp("2021-01-01")).dt.days / 30.44
+    # Calendar month of listing (1-12), for the spring peak and the summer/autumn dip. Every
+    # month appears in each training year, so trees can learn it, unlike the trend above.
+    X["list_month"] = homes["date_listed"].dt.month
     # One 0/1 column per property type.
     for kind in PROPERTY_TYPES:
         X["is_" + kind] = (homes["house_type_name"] == kind).astype(int)
-    return X
+    return X.join(remark_features(homes))
 
 
-def list_aware_features(homes):
-    """Features for homes that have a list price: everything above, plus the list price."""
-    X = off_market_features(homes)
+MAX_STALENESS_DAYS = 120   # the test homes are listed up to ~4 months after the data ends
+
+
+def off_market_features(homes, history, training=False, max_staleness_days=MAX_STALENESS_DAYS):
+    """Features for homes with no list price. `history` is the training sales, used only
+    through market_features(), which looks at sales before each home's listing date.
+    `training` is True when `homes` are the training sales themselves."""
+    return property_features(homes).join(market_features(homes, history, training, max_staleness_days))
+
+
+def list_aware_features(homes, history, training=False):
+    """Features for homes that have a list price: the property features plus the list price.
+    No market features for now: on the dev months they made list-aware worse at 2-3 month
+    horizons (experiments.md #7), because stale market levels compete with the fresh list price."""
+    X = property_features(homes)
     X["list_price"] = homes["list_price"]
     return X
