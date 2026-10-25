@@ -85,6 +85,15 @@ def off_market_variant(drop=(), half_life_days=None, max_staleness_days=features
     return lambda track: models.FeatureModel(make_features, half_life_days, bias_correction_days, **params)
 
 
+def list_aware_variant(sale_to_list=True, versus_market=True, max_staleness_days=features.MAX_STALENESS_DAYS,
+                       relative_to_list=True, half_life_days=None, **params):
+    """A FeatureModel for list-aware with some feature groups or settings changed, for ablations."""
+    def make_features(homes, history, training=False):
+        return features.list_aware_features(homes, history, training, sale_to_list, versus_market,
+                                            max_staleness_days)
+    return lambda track: models.FeatureModel(make_features, half_life_days, None, relative_to_list, **params)
+
+
 MODELS = {
     "passline": lambda track: PassLineBaseline(),
     "starter": models.make_baseline,
@@ -103,6 +112,17 @@ MODELS = {
     "tune_a": off_market_variant(half_life_days=365, max_iter=300, learning_rate=0.05, early_stopping=False),
     "tune_b": off_market_variant(half_life_days=365, max_iter=600, learning_rate=0.05, max_leaf_nodes=63,
                                  min_samples_leaf=50, early_stopping=False),
+    # Phase 2 (list-aware) steps.
+    "list_price_target": list_aware_variant(False, False, 0, relative_to_list=False),
+    "list_ratio": list_aware_variant(False, False, 0),
+    "list_ratio_s2l": list_aware_variant(True, False),
+    "list_ratio_s2l_vm": list_aware_variant(True, True),
+    "list_hl365": list_aware_variant(half_life_days=365),
+    "list_hl365_a": list_aware_variant(half_life_days=365, max_iter=300, learning_rate=0.05, early_stopping=False),
+    "list_hl365_b": list_aware_variant(half_life_days=365, max_iter=600, learning_rate=0.05, max_leaf_nodes=63,
+                                       min_samples_leaf=50, early_stopping=False),
+    "list_hl365_tuned": list_aware_variant(half_life_days=365, max_iter=1500, learning_rate=0.03,
+                                           max_leaf_nodes=127, min_samples_leaf=50, early_stopping=False),
     "tune_c": off_market_variant(half_life_days=365, max_iter=1500, learning_rate=0.03, max_leaf_nodes=127,
                                  min_samples_leaf=50, early_stopping=False),
 }

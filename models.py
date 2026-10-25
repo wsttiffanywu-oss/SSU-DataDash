@@ -22,8 +22,9 @@ OFF_MARKET_PARAMS = {"max_iter": 1500, "learning_rate": 0.03, "max_leaf_nodes": 
 def make_model(track):
     """Return a fresh, untrained model for "off_market" or "list_aware"."""
     if track == "list_aware":
-        # Phase 1 placeholder: property features + list price, default trees (experiments.md #9).
-        return FeatureModel(features.list_aware_features)
+        # Learns log(sold / list) from property, sale-to-list and list-vs-market features, recent
+        # sales weighted more; default trees (bigger ones overfit). experiments.md #24.
+        return FeatureModel(features.list_aware_features, half_life_days=365, relative_to_list=True)
     # Market features with simulated staleness, recent sales weighted more (experiments.md #12, #19).
     return FeatureModel(features.off_market_features, half_life_days=365, **OFF_MARKET_PARAMS)
 
@@ -91,11 +92,14 @@ class FeatureModel:
     in make_model().
     """
 
-    def __init__(self, make_features, half_life_days=None, bias_correction_days=None, **params):
+    def __init__(self, make_features, half_life_days=None, bias_correction_days=None,
+                 relative_to_list=False, **params):
         """half_life_days: if set, a sale that many days older than the newest training sale
         counts half as much in training. bias_correction_days: if set, see fit_bias().
-        params go to HistGradientBoostingRegressor."""
+        relative_to_list: learn log(sold / list) instead of log(sold), then multiply back by the
+        list price (list-aware only). params go to HistGradientBoostingRegressor."""
         self.make_features = make_features
+        self.relative_to_list = relative_to_list
         self.half_life_days = half_life_days
         self.bias_correction_days = bias_correction_days
         self.params = params
@@ -119,7 +123,8 @@ class FeatureModel:
         split = train["date_sold"].max() - pd.Timedelta(days=self.bias_correction_days)
         early, late = train[train["date_sold"] <= split], train[train["date_sold"] > split]
         late = late[late["date_listed"] > split]   # listed after the copy's data ends, like the test
-        copy = FeatureModel(self.make_features, self.half_life_days, **self.params).fit(early)
+        copy = FeatureModel(self.make_features, self.half_life_days, None, self.relative_to_list,
+                            **self.params).fit(early)
         self.log_bias = float(np.median(np.log(copy.predict(late)) - np.log(late["sold_price"])))
 
     def fit(self, train):
@@ -133,8 +138,13 @@ class FeatureModel:
         if self.half_life_days:
             age = (train["date_sold"].max() - train["date_sold"]).dt.days
             weight = 0.5 ** (age / self.half_life_days)
-        self.model.fit(self.encode(X), np.log(train["sold_price"]), sample_weight=weight)
+        self.model.fit(self.encode(X), np.log(train["sold_price"]) - self.log_base(train), sample_weight=weight)
         return self
 
+    def log_base(self, homes):
+        """What the trees' output is relative to: log(list price), or 0 for plain log(price)."""
+        return np.log(homes["list_price"]).to_numpy() if self.relative_to_list else 0.0
+
     def predict(self, homes):
-        return np.exp(self.model.predict(self.encode(self.make_features(homes, self.history))) - self.log_bias)
+        log_price = self.model.predict(self.encode(self.make_features(homes, self.history))) + self.log_base(homes)
+        return np.exp(log_price - self.log_bias)

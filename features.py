@@ -29,8 +29,8 @@ def square_feet(house_area):
     return (low + high) / 2
 
 
-def past_window_mean(homes, history, keys, days):
-    """For each home: the mean log price per sq ft of the history sales in its `keys` group
+def past_window_mean(homes, history, keys, days, value="log_ppsf"):
+    """For each home: the mean `value` (a column of history) of the history sales in its `keys` group
     that closed in the `days` days before its `as_of` date, and how many there were.
 
     `as_of` is never after the listing date, and a sale on the `as_of` day itself is not used.
@@ -45,7 +45,7 @@ def past_window_mean(homes, history, keys, days):
             continue
         past = past.sort_values("date_sold")
         dates = past["date_sold"].to_numpy()
-        cumulative = np.concatenate([[0.0], np.cumsum(past["log_ppsf"].to_numpy())])
+        cumulative = np.concatenate([[0.0], np.cumsum(past[value].to_numpy())])
         as_of = rows["as_of"].to_numpy()
         end = np.searchsorted(dates, as_of, side="left")
         start = np.searchsorted(dates, as_of - np.timedelta64(days, "D"), side="left")
@@ -54,6 +54,16 @@ def past_window_mean(homes, history, keys, days):
             mean[rows.index] = np.where(n > 0, (cumulative[end] - cumulative[start]) / n, np.nan)
         count[rows.index] = n
     return mean, count
+
+
+def as_of_dates(homes, history, training=False, max_staleness_days=0):
+    """The date each home's market windows end (see market_features). Deterministic, so every
+    feature group of one training table gets the same random staleness."""
+    if training:
+        rng = np.random.default_rng(0)
+        lag = rng.integers(0, max_staleness_days + 1, len(homes)) if max_staleness_days else 0
+        return homes["date_listed"] - pd.to_timedelta(lag, unit="D")
+    return homes["date_listed"].clip(upper=history["date_sold"].max() + pd.Timedelta(days=1))
 
 
 def market_features(homes, history, training=False, max_staleness_days=0):
@@ -69,13 +79,7 @@ def market_features(homes, history, training=False, max_staleness_days=0):
     how far prices move while the data is that old."""
     history = history.assign(
         log_ppsf=np.log(history["sold_price"] / square_feet(history["house_area"])), all="all")
-    if training:
-        rng = np.random.default_rng(0)
-        lag = rng.integers(0, max_staleness_days + 1, len(homes)) if max_staleness_days else 0
-        as_of = homes["date_listed"] - pd.to_timedelta(lag, unit="D")
-    else:
-        as_of = homes["date_listed"].clip(upper=history["date_sold"].max() + pd.Timedelta(days=1))
-    homes = homes.assign(all="all", as_of=as_of)
+    homes = homes.assign(all="all", as_of=as_of_dates(homes, history, training, max_staleness_days))
     X = pd.DataFrame(index=homes.index)
     if max_staleness_days:
         X["staleness_days"] = (homes["date_listed"] - homes["as_of"]).dt.days
@@ -93,6 +97,38 @@ def market_features(homes, history, training=False, max_staleness_days=0):
     X["ct_premium"] = X["ct_ppsf_365d"] - X["t_ppsf_365d"]
     # A naive estimate: the neighbourhood's recent price per sq ft times this home's size.
     X["ct_naive_log_price"] = X["ct_ppsf_182d"] + np.log(square_feet(homes["house_area"]))
+    return X
+
+
+def sale_to_list_features(homes, history, training=False, max_staleness_days=0):
+    """How far below or above their list price homes closed just before this one was listed:
+    mean log(sold / list) of past sales by community x type, community, type and city, using
+    the same windows ending at `as_of` as market_features()."""
+    history = history.assign(log_sale_to_list=np.log(history["sold_price"] / history["list_price"]), all="all")
+    homes = homes.assign(all="all", as_of=as_of_dates(homes, history, training, max_staleness_days))
+    X = pd.DataFrame(index=homes.index)
+    groups = {"ct": ["community", "house_type_name"], "c": ["community"],
+              "t": ["house_type_name"], "city": ["all"]}
+    windows = {"ct": [91, 365], "c": [365], "t": [30, 91, 365], "city": [30, 91, 365]}
+    for name, keys in groups.items():
+        for days in windows[name]:
+            X[f"{name}_s2l_{days}d"], n = past_window_mean(homes, history, keys, days, "log_sale_to_list")
+            if days == 365:
+                X[f"{name}_s2l_n_365d"] = n
+    X["city_s2l_momentum"] = X["city_s2l_91d"] - X["city_s2l_365d"]
+    return X
+
+
+def list_vs_market(homes, market):
+    """How the list price compares with what recent sales nearby suggest (log ratios; above 0:
+    listed above the neighbourhood's recent price per sq ft times this home's size)."""
+    log_list = np.log(homes["list_price"])
+    log_sqft = np.log(square_feet(homes["house_area"]))
+    X = pd.DataFrame(index=homes.index)
+    X["list_vs_ct_182d"] = log_list - market["ct_naive_log_price"]
+    X["list_vs_ct_365d"] = log_list - (market["ct_ppsf_365d"] + log_sqft)
+    X["list_vs_t_91d"] = log_list - (market["t_ppsf_91d"] + log_sqft)
+    X["list_vs_c_365d"] = log_list - (market["c_ppsf_365d"] + log_sqft)
     return X
 
 
@@ -167,10 +203,21 @@ def off_market_features(homes, history, training=False, max_staleness_days=MAX_S
     return property_features(homes).join(market_features(homes, history, training, max_staleness_days))
 
 
-def list_aware_features(homes, history, training=False):
-    """Features for homes that have a list price: the property features plus the list price.
-    No market features for now: on the dev months they made list-aware worse at 2-3 month
-    horizons (experiments.md #7), because stale market levels compete with the fresh list price."""
+def list_aware_features(homes, history, training=False, sale_to_list=True, versus_market=True,
+                        max_staleness_days=MAX_STALENESS_DAYS):
+    """Features for homes that have a list price: the property features, the list price and,
+    optionally, recent sale-to-list ratios and how the list price compares with the market.
+    (Without these, the off-market market features made list-aware worse: experiments.md #7.)"""
     X = property_features(homes)
     X["list_price"] = homes["list_price"]
+    if sale_to_list:
+        X = X.join(sale_to_list_features(homes, history, training, max_staleness_days))
+    if versus_market:
+        market = market_features(homes, history, training, max_staleness_days)
+        X = X.join(list_vs_market(homes, market))
+        X["log_list_per_sqft"] = np.log(homes["list_price"] / square_feet(homes["house_area"]))
+        if max_staleness_days and "staleness_days" not in X:
+            X["staleness_days"] = market["staleness_days"]
+    elif sale_to_list and max_staleness_days:
+        X["staleness_days"] = (homes["date_listed"] - as_of_dates(homes, history, training, max_staleness_days)).dt.days
     return X

@@ -7,17 +7,18 @@ import features
 from test_starter import make_listings
 
 
+@pytest.mark.parametrize("make", [features.market_features, features.sale_to_list_features])
 @pytest.mark.parametrize("options", [{}, {"training": True, "max_staleness_days": 120}])
-def test_market_features_ignore_later_and_own_sales(options):
+def test_market_features_ignore_later_and_own_sales(make, options):
     listings = make_listings(500)
-    before = features.market_features(listings, listings, **options)
+    before = make(listings, listings, **options)
     # Make every sale wildly expensive: only homes listed after that sale may change.
     changed = listings.assign(sold_price=listings["sold_price"] * 100)
     some_later_home_changed = False
     for i in [0, 10, 200, 300, 400]:
         tweaked = listings.copy()
         tweaked.loc[i, "sold_price"] = changed.loc[i, "sold_price"]
-        after = features.market_features(tweaked, tweaked, **options)
+        after = make(tweaked, tweaked, **options)
         # The home's own sale never feeds its own features.
         pd.testing.assert_series_equal(before.loc[i], after.loc[i])
         # Homes listed on or before that sale closed are unaffected.

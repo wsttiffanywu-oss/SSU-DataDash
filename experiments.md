@@ -78,3 +78,34 @@ Open items:
 - Bias correction (#16) helps on dev but flips sign at the final cutoff (−3.4%) → needs a decision.
 - Tuning stopped at #19 for run-time reasons; larger trees may still help a little.
 - Remarks: only hand-picked phrases so far; TF-IDF / embeddings not tried.
+
+## Phase 2: list-aware (branch phase2/list-aware)
+
+| # | Date | Change | Track | Dev MdAPE | Dev MAPE | Final val touched? | Notes |
+|---|---|---|---|---|---|---|---|
+| 20 | 2026-10-23 | `list_price_target`: re-run of #9 list-aware (property + remarks + list_price, log price target) | list | 4.71 | 5.88 | No | Same as #9 (sanity check after refactor). signed +2.0% |
+| 21 | 2026-10-23 | Step 1 `list_ratio`: same features, target log(sold/list), prediction × list price | list | 4.68 | 5.75 | No | −0.03 vs #20; MAPE −0.13. Bias unchanged (+2.1%) |
+| 22 | 2026-10-23 | Step 2 `list_ratio_s2l`: + sale_to_list_features(): past-only mean log(sold/list) by community×type (3/12 mo), community (12), type (1/3/12), city (1/3/12), counts, momentum; windows anchored and staleness-simulated as in #11 | list | 4.46 | 5.54 | No | −0.22 vs #21. signed h0→h3 +1.2→+1.9. Leakage tests extended to these features |
+| 23 | 2026-10-23 | Step 3 `list_ratio_s2l_vm`: + list_vs_market(): log list price minus (recent ppsf × sqft) for community×type 6/12 mo, community 12 mo, type 3 mo; log list per sqft | list | 4.32 | 5.38 | No | −0.14 vs #22. signed h0→h3 +1.0→+1.8 |
+| 24 | 2026-10-23 | Step 4 `list_hl365`: #23 + recency weights (half-life 365 days) | list | **4.24** | 5.32 | No | −0.08 vs #23. signed h0→h3 +0.9→+1.6 |
+| 25 | 2026-10-23 | `list_hl365_tuned`: #24 + off-market tree settings (1500 iters, lr 0.03, 127 leaves) | list | 4.35 | 5.42 | No | +0.11 worse than #24: the ratio target has less signal, big trees overfit |
+| 26 | 2026-10-23 | `list_hl365_a`: #24 + 300 iters, lr 0.05, no early stopping | list | 4.24 | 5.32 | No | tie with #24 |
+| 27 | 2026-10-23 | `list_hl365_b`: #24 + 600 iters, lr 0.05, 63 leaves, min leaf 50 | list | 4.29 | 5.36 | No | worse → **#24 (default trees) adopted** |
+
+## Phase 2 summary (2026-10-23)
+
+List-aware dev MdAPE (2025-06 to 2025-11, horizons 0–3 pooled), each step on top of the previous:
+
+| Step | List-aware MdAPE | Change |
+|---|---|---|
+| List price as the prediction (starter baseline) | 7.09 | — |
+| Phase 1 placeholder (#9 / #20) | 4.71 | — |
+| 1. Target log(sold/list) | 4.68 | −0.03 |
+| 2. Past-only sale-to-list levels | 4.46 | −0.22 |
+| 3. List price vs recent neighbourhood price per sq ft | 4.32 | −0.14 |
+| 4. Recency weights (half-life 1 year) | **4.24** | −0.08 |
+
+Bigger trees did not help (#25–#27). Remaining bias: median signed +0.9% (h=0) to +1.6% (h=3).
+`make_model("list_aware")` now uses #24. `predict` + `check` OK, rerun byte-identical. Predictions are a median 0.948 × list price (5–95%: 0.897–1.054); sales in 2025 Q3–2026 Q2 closed at 0.941–0.949 × list.
+Final validation still not run since Phase 0.
+Not tried: the full off-market valuation as a list-aware feature (needs time-respecting out-of-sample valuations for every training sale).
