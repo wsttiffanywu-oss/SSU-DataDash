@@ -109,3 +109,30 @@ Bigger trees did not help (#25–#27). Remaining bias: median signed +0.9% (h=0)
 `make_model("list_aware")` now uses #24. `predict` + `check` OK, rerun byte-identical. Predictions are a median 0.948 × list price (5–95%: 0.897–1.054); sales in 2025 Q3–2026 Q2 closed at 0.941–0.949 × list.
 Final validation still not run since Phase 0.
 Not tried: the full off-market valuation as a list-aware feature (needs time-respecting out-of-sample valuations for every training sale).
+
+## Phase 3: uncertainty and error analysis (branch phase3/uncertainty)
+
+Source: `python dev_validate.py final` (make_model() for both tracks) reproduces #19 / #24 exactly: off-market 9.35 / list-aware 4.24. Final validation still not touched. Every dev home is predicted 4 times (h=0..3), so counts are predictions (48,676 per track), not homes.
+
+### Prediction intervals (intervals.py, `python phase3.py intervals`)
+
+Split conformal: interval = prediction × [10th, 90th] percentile (80%) or [5th, 95th] (90%) of dev log errors log(sold/predicted), per property type × price third (by predicted price within the type); groups under 200 predictions fall back to the type, then the track. Calibrated on 3 dev months, checked on the other 3, both ways.
+
+| # | Variant | Track | 80% coverage (fold A / B) | 90% coverage | Median 80% width | Notes |
+|---|---|---|---|---|---|---|
+| 28 | by type only | off | 79.8 / 79.4 | 89.9 / 89.6 | 30% | but expensive third of homes covered only 72.0% (cheap 84.0%) |
+| 29 | **by type × price third (adopted)** | off | 79.4 / 79.5 | 89.9 / 89.4 | 35% | cheap/mid/expensive 79.5 / 80.0 / 78.8% → even across prices; expensive homes get wider (40%) intervals |
+| 30 | by type only | list | 82.7 / 76.4 | 91.5 / 87.8 | 15% | cheap third 77.6% |
+| 31 | **by type × price third (adopted)** | list | 82.5 / 76.2 | 91.6 / 87.0 | 16% | 79.5 / 79.4 / 79.3% by price third |
+
+Coverage is flat across horizons (off 79.3–79.6%, list 78.5–80.2%). List-aware coverage moves with the season: 75–77% in Jun–Aug, 82–83% in Sep–Nov (sale-to-list behaviour shifts in summer), so its 80% intervals may run a little narrow for the Jun–Sep test. Co-Op Apt (296 predictions = 74 homes) is too small for price bands and gets one interval for the whole type; its coverage is unreliable (off 68.6%, list 88.9%). Freehold Townhouse covered 74–76%.
+Test intervals: `outputs/test_intervals_{track}.csv`, calibrated on all dev months; median 80% width 34.6% (off) and 16.0% (list) of the prediction. Intervals are asymmetric (e.g. condo: −16% / +10%) because the models still price slightly high.
+
+### Error analysis (`python phase3.py errors` → reports/error_analysis.md, figures/error_by_*.png)
+
+- **Property type**: off-market condos 7.9–8.0%, detached/semi 11.0–11.1%, freehold townhouse 12.5% (and +7.5% overestimate). List-aware: condo apt 3.4%, semi 6.2%.
+- **Price**: by predicted-price decile, off-market error rises from 7.5% (cheapest) to 13.5% (dearest). By sold-price decile the cheapest homes are overestimated +10% and the dearest underestimated −5%: regression to the mean (homes that sold unusually low/high are the ones we missed), so the predicted-price view is the fair one.
+- **Remarks condition**: error is flat across condition scores (off 9.2–10.0%, list 4.1–4.4%) → the text features take care of condition; it is not where the model fails.
+- **Communities**: off-market MdAPE ranges 5.1%–20.7% (Maplepark). It tracks how mixed prices are in a community (Spearman 0.43 with the spread of log price/sqft) much more than how many sales it had (−0.15).
+- **List-aware**: errors are 2.5–3.3% when the sale lands between list and ~10% under list, and 6.6–7.2% when a home sells above list (bidding) or more than ~10% under it. Negotiation outcomes far from the usual are what it cannot see. (Grouped by the outcome itself, so diagnostic only.)
+- Horizon and month: off-market 9.0–9.6% across months; list-aware worst in June (4.6%).
