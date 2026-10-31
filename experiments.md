@@ -156,3 +156,14 @@ Staleness training alone is worth only −0.03 to −0.05 overall (−0.06 to �
 | 35 | 2026-10-31 | `final_nostale`: the final off-market model (#19 trees, half-life 365) with staleness training off (windows still end at the last day of data, as in #10) | off | **9.19** | **11.94** | No | vs final 9.35 / 12.15: better at every horizon (h0→h3 8.99/9.16/9.22/9.42 vs 9.21/…/9.47) and less overestimate (signed +3.14 vs +3.54; h0 +1.83 → h3 +4.44). With large trees, staleness training costs accuracy. **Decision pending (Tiffany)**: dropping it is a simplification, but it is one more choice made on the dev months |
 
 **Frozen models (2026-10-31).** Off-market = #35 (no simulated staleness; `models.make_model`), list-aware = #24 unchanged. `python dev_validate.py final` reproduces 9.19 / 11.94 (off) and 4.24 / 5.32 (list) exactly. Refreshed with the new off-market dev predictions: intervals 80% coverage 78.7 / 79.9 (90%: 89.2 / 89.5), cheap/mid/expensive 79.6 / 79.8 / 78.5 (without price thirds 83.6 / 82.6 / 72.1), median test width 34.8%; error analysis: condos 7.7–7.8%, detached/semi 10.9–11.1%, freehold TH 11.7%, community spread Spearman 0.47 (sales −0.20), Maplepark 18.8%. List-aware numbers unchanged. Off-market submission file changed (a30b3f0…), list-aware identical (befdb09…). Final validation not yet run.
+
+## Final check (run once, 2026-10-31, frozen models = commit 70353bd)
+
+| Validation (Dec 2025 – May 2026, 10,069 homes) | Track | MdAPE | MAPE | Signed | h0 → h3 |
+|---|---|---|---|---|---|
+| Official `run.py validate` (h=0) | off | 8.66 (95% CI 8.47–8.88) | 11.27 | −0.12 | — |
+| | list | 4.17 (4.06–4.26) | 5.22 | +0.22 | — |
+| Same months at horizons 0–3 (`FINAL_CHECK=1 dev_validate.py final`) | off | **8.98** | 11.54 | −0.27 | 8.66 / 8.94 / 9.19 / 9.09 |
+| | list | **4.13** | 5.23 | +0.04 | 4.17 / 4.12 / 4.11 / 4.11 |
+
+Close to the dev numbers (9.19 / 4.24); bars on these months 17.7 / 7.3. The 2025 overestimate vanished: off-market signed by month +4.46, +2.45, −0.74, −1.72, −1.58, −1.20 (spring 2026 rebound). Intervals calibrated on all dev months, applied once: 80% coverage 77.5% off (by month 79.5 → 76.1), 79.0% list; 90%: 88.0 / 89.2. Nothing was changed after seeing these numbers.

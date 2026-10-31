@@ -67,7 +67,7 @@ earlier). Dev Jun–Nov 2025: every decision, 35 logged experiments. Final check
 **Title:** Results
 
 **On screen:** Results table (dev + final check). Biggest gain: past market prices (−3.0 points).
-80% intervals covered 【XX】% of held-out sales.
+Final check (run once): 8.98% / 4.13%. 80% intervals covered 77.5% on the final check.
 
 **Image:** slide07a_results.png (table). Second image or build: slide07b_ablation.png (each idea
 added one at a time).
@@ -85,7 +85,7 @@ wars and deep discounts.
 
 **Title:** Limitations
 
-**On screen:** Still ~3% high (falling 2025 market). Bias correction tested, left out. Hand-picked
+**On screen:** ~3% high in falling 2025, ~0 in rising spring 2026. Bias correction tested, left out. Hand-picked
 remark phrases. Only gradient-boosted trees.
 
 **Image:** slide09_limitations.png (overestimate by months ahead).
@@ -104,6 +104,6 @@ remark phrases. Only gradient-boosted trees.
 
 **On screen:**
 `pip install -r requirements.txt` · `pytest` · `python run.py predict` · `python run.py check`.
-Fixed seeds, pinned versions → byte-identical files. 【GitHub link】
+Fixed seeds, pinned versions → byte-identical files. github.com/wsttiffanywu-oss/SSU-Data-Dash
 
 **Image:** none (commands on screen), or a QR code to the repository.

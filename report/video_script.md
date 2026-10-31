@@ -63,8 +63,9 @@ we locked away and ran exactly once, after freezing both models.
 
 ## Slide 7 — Results (2:50–3:35)
 
-On the locked final check, the off-market error was 【X.XX】% and list-aware 【X.XX】%.
-【One sentence: close to / a bit above the dev numbers, and why.】
+On the locked final check, run once, the off-market error was 8.98% and list-aware 4.13%, with
+data ending zero to three months earlier — about the same as on our development months, and well
+under both bars. That's the number we expect the hidden test to look like.
 
 Error barely grows with distance: 9.0% when the data is fresh, 9.4% three months out.
 
@@ -72,7 +73,8 @@ This chart adds our ideas one at a time. Past market prices were the biggest gai
 points. And one idea we expected to matter — training on deliberately stale data — didn't help once
 the trees were large, so we removed it.
 
-We also give a range: our 80% intervals covered 【XX】% of held-out sales.
+We also give a range: on the final check, our 80% intervals covered 77.5% of sales — a little
+narrow, and we say so in the report.
 
 ## Slide 8 — Where the model fails (3:35–4:10)
 
@@ -84,9 +86,9 @@ list-aware, the misses are bidding wars and deep discounts — nothing in a list
 
 ## Slide 9 — Limitations (4:10–4:30)
 
-Both models still price a little high, about 3%, because prices kept falling through 2025. A
-correction helped on our development months, but at our final data date it pointed the other way,
-untested — so we left it out. Our remark phrases are hand-picked, and we only tried tree models.
+In 2025 both models priced about 3% high, because prices kept falling; in spring 2026 that bias
+vanished as prices rose. A correction helped on our development months, but at our final data date
+it pointed the other way, untested — so we left it out. Our remark phrases are hand-picked, and we only tried tree models.
 
 ## Slide 10 — Outside Data (4:30–4:35)
 

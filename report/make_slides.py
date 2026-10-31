@@ -224,7 +224,7 @@ def results(final):
         rows = frame[(frame["track"] == track) & ((frame["model"] == model) if model else True)]
         return f"{rows['ape'].median():.2f}%"
     rows = [["", "Off-market", "List-aware"],
-            ["Baseline", f"{md(baselines, 'off_market', 'passline')} (pass line)",
+            ["Baseline (dev months)", f"{md(baselines, 'off_market', 'passline')} (pass line)",
              f"{md(baselines, 'list_aware', 'starter')} (list price)"],
             ["Ours, dev months (Jun–Nov 2025)", md(final, "off_market"), md(final, "list_aware")],
             ["Ours, final check (Dec 2025–May 2026)",

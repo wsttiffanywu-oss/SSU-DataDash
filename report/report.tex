@@ -29,7 +29,8 @@ condition, and what similar homes nearby sold for \emph{before} it was listed. B
 sell 0--4 months after our data ends, we validated every choice on six earlier months
 (June--November 2025) predicted at gaps of 0, 1, 2 and 3 months. On those months the off-market median error (MdAPE) is
 9.19\% against 18.70\% for the pass line, and list-aware is 4.24\% against 7.09\% for the list price.
-Our 80\% prediction intervals covered 78.7--79.9\% of held-out off-market sales. Past market levels
+On the final check, run once after freezing, they score 8.98\% and 4.13\% (8.66\% and 4.17\% on the
+official validation). Our 80\% prediction intervals covered 77.5--79.9\% of held-out off-market sales. Past market levels
 gave by far the largest gain; weighting recent sales more and ending the market windows at the last
 day of data kept the error nearly flat as the gap grows.
 
@@ -95,7 +96,7 @@ in May and September from data three months older. The official \texttt{run.py v
 gap of 0, which flatters every model. All features, settings and the intervals were chosen on the
 dev months (over 30 logged experiments in \texttt{experiments.md}).
 \textbf{Final check} (December 2025--May 2026): run once, after freezing both models; we did not look
-at it while developing \todo{run after freeze}.
+at it while developing.
 
 \section{Results}
 \begin{table}[h]
@@ -106,15 +107,35 @@ at it while developing \todo{run after freeze}.
 \label{tab:dev}
 \end{table}
 
-\todo{Final check table: \texttt{python run.py validate \&\& python run.py report}, then
-\texttt{\textbackslash input\{../reports/results\_table.tex\}} here, plus the same months at gaps 0--3.}
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llrrrrr}
+\toprule
+Final check & Track & MdAPE & MAPE & Signed & MdAPE $h{=}0$ & MdAPE $h{=}3$ \\
+\midrule
+Official (\texttt{run.py validate}) & off-market & 8.66 & 11.27 & $-0.12$ & 8.66 & -- \\
+ & list-aware & 4.17 & 5.22 & $+0.22$ & 4.17 & -- \\
+Gaps 0--3 months, as in the test & off-market & \textbf{8.98} & 11.54 & $-0.27$ & 8.66 & 9.09 \\
+ & list-aware & \textbf{4.13} & 5.23 & $+0.04$ & 4.17 & 4.11 \\
+\bottomrule
+\end{tabular}
+\caption{Final check, December 2025--May 2026 (10,069 homes), run once after freezing. Official
+95\% bootstrap intervals for MdAPE: 8.47--8.88 (off-market), 4.06--4.26 (list-aware). The bars on the
+same months: 17.7\% (pass line) and 7.3\% (list price).}
+\label{tab:final}
+\end{table}
+
+\textbf{Final check.} Both models scored about as well as on the dev months (Table~\ref{tab:final}),
+well under both bars; we expect the hidden-test error to be close to the gap-0--3 numbers. The 2025
+overestimate disappeared because prices rose in spring 2026 (off-market signed error +4.5\% in
+December, $-1.7\%$ in March): its sign follows the market, which we cannot see for summer 2026.
 
 Both models clear their baselines by about half (Table~\ref{tab:dev}). Error barely grows with the gap
 (off-market 8.99\% at $h{=}0$, 9.42\% at $h{=}3$; Figure~\ref{fig:design}b). The largest gains came
 from past market levels ($-3.0$ points) and larger trees ($-1.4$); Figure~\ref{fig:ablation} shows each
 step on its own. A $2\times2$ check (smaller trees) separates two ideas we first added together:
 recency weights lowered MdAPE by 0.16--0.21 points (0.29--0.33 at $h{=}3$), staleness training by
-only 0.03--0.05 (0.06--0.10 at $h{=}3$); with the final trees it hurt, so we removed it (Section~2).
+only 0.03--0.05; with the final trees it hurt, so we removed it (Section~2).
 
 \begin{figure}[t]
 \centering
@@ -124,15 +145,13 @@ only 0.03--0.05 (0.06--0.10 at $h{=}3$); with the final trees it hurt, so we rem
 \end{figure}
 
 \textbf{Uncertainty.} An 80\% (90\%) interval is the prediction times the 10th and 90th (5th and 95th)
-percentiles of past dev errors of homes of the same type and price third (split conformal).
-Calibrated on three dev months and checked on the other three, both ways round (we chose the price
-thirds on these same checks, so the final check is the independent test), the off-market
-80\% intervals covered 78.7\% and 79.9\% of sales (90\%: 89.2\%, 89.5\%), evenly across cheap, middle and
-expensive homes (79.6/79.8/78.5\%) and gaps (79.1--79.5\%). Without price thirds the dearest homes
-were covered only 72\%. List-aware coverage was 82.5\% and 76.2\%: it moves with the season (75--77\%
-in June--August), so its intervals may be a little narrow for a summer test. Median 80\% widths are
-35\% (off-market) and 16\% (list-aware) of the prediction; they are asymmetric because the models
-still price slightly high. Intervals for every test home are in \texttt{outputs/}.
+percentiles of dev errors of homes of the same type and price third (split conformal). Calibrated on
+three dev months and checked on the other three, both ways round, off-market 80\% intervals covered
+78.7\% and 79.9\% (cheap/middle/dear 79.6/79.8/78.5\%; without price thirds the dearest only 72\%);
+list-aware 82.5\% and 76.2\%, lower in summer. We chose the price thirds on these checks, so the final
+check is the independent test: there the 80\% (90\%) intervals covered 77.5\% (88.0\%) off-market and
+79.0\% (89.2\%) list-aware, a little narrow. Median 80\% widths are 35\% and 16\% of the prediction;
+intervals for every test home are in \texttt{outputs/}.
 
 \section{Where the model fails}
 \begin{figure}[t]
@@ -150,10 +169,9 @@ record (lot shape, renovation quality, the street).
 (Spearman 0.47), much more than how many sales it had ($-0.20$). The worst, Maplepark (18.8\%), has one
 of the widest spreads (Figure~\ref{fig:fails}b).
 \textbf{Expensive homes.} Off-market error rises from 7.2\% in the cheapest tenth of predictions to
-13.5\% in the dearest. (By \emph{sold}-price decile the cheapest homes look overpriced by 10\% and the
-dearest underpriced by 6\%. By \emph{predicted}-price decile the median signed error stays between
-+2\% and +4.5\%, so that swing is mostly regression to the mean; the general overestimate remains,
-see Limitations.)
+13.5\% in the dearest. (By \emph{sold}-price decile the cheapest homes look 10\% overpriced and the dearest 6\%
+underpriced; by \emph{predicted}-price decile the signed error stays at +2 to +4.5\%, so that swing is
+mostly regression to the mean.)
 \textbf{Not condition.} Error is flat across the remarks condition score (9.0--9.5\%), so the text
 features handle condition.
 \textbf{List-aware: unusual negotiations.} When a home sells between its list price and 10\% below,
@@ -161,14 +179,11 @@ the error is 2.5--3.3\%; bidding wars and deep discounts push it to 6.6--7.2\%. 
 predicts those.
 
 \section{Limitations}
-Both models still price high on the dev months (median signed error +1.8\% at $h{=}0$ to +4.4\% at
-$h{=}3$ off-market, +0.9\% to +1.6\% list-aware), because prices kept falling through 2025.
-We tried correcting this with the bias measured on the last 120 days of training data. On the dev months it
-lowered MdAPE from 10.53\% to 10.38\% (tested before the final tuning), but at our final data end
-(May 2026) it would raise every summer prediction by 3.4\%, a direction the dev months never tested,
-right after a spring rebound and before the seasonal dip. We left it out.
-The remarks features are hand-picked phrases; a text model might find more. We tried only
-gradient-boosted trees. The intervals assume the next months' errors look like 2025's.
+On the dev months both models priced high (off-market +1.8\% at $h{=}0$ to +4.4\% at $h{=}3$) as
+prices fell through 2025; on the final check the bias was near zero. A correction from the last
+120 days of training data lowered dev MdAPE from 10.53\% to 10.38\% (before the final tuning), but at
+May 2026 it would raise every summer prediction by 3.4\%, a direction never tested; we left it out.
+Remark phrases are hand-picked, and we tried only gradient-boosted trees.
 
 \section*{Outside data}
 \begin{tabular}{lll}
