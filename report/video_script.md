@@ -9,7 +9,7 @@ validation (experiments.md / report). Suggested split for four speakers: slides 
 
 ## Slide 1 — Title (0:00–0:10)
 
-Hi, we're 【team name】, and this is our entry to the SSU Data Dash: valuing Toronto homes a few
+Hi, we're Yuchen Ji, Shuting Wu, Stephanie Zheng and Lanqi Qiu, and this is our entry to the SSU Data Dash: valuing Toronto homes a few
 months ahead.
 
 ## Slide 2 — Table of contents (0:10–0:20)

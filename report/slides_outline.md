@@ -11,7 +11,7 @@ final check.
 
 **Title:** Valuing Toronto homes 0–4 months ahead
 
-**On screen:** SSU Data Dash 2026 · 【team name】 · 【full names】
+**On screen:** SSU Data Dash 2026 · Yuchen Ji | Shuting Wu | Stephanie Zheng | Lanqi Qiu
 
 **Image:** none.
 
