@@ -27,11 +27,11 @@ We turned on the starter's gradient-boosted trees and fed them three kinds of in
 valuer would have before a home is listed: the home itself, what its description says about its
 condition, and what similar homes nearby sold for \emph{before} it was listed. Because the test homes
 sell 0--4 months after our data ends, we validated every choice on six earlier months
-(June--November 2025) predicted at gaps of 0, 1, 2 and 3 months, and trained the model on data that
-was deliberately made just as stale. On those months the off-market median error (MdAPE) is
-9.35\% against 18.70\% for the pass line, and list-aware is 4.24\% against 7.09\% for the list price.
-Our 80\% prediction intervals covered 79.4--79.5\% of held-out off-market sales. The main lesson:
-how stale the market data is matters as much as which features we use.
+(June--November 2025) predicted at gaps of 0, 1, 2 and 3 months. On those months the off-market median error (MdAPE) is
+9.19\% against 18.70\% for the pass line, and list-aware is 4.24\% against 7.09\% for the list price.
+Our 80\% prediction intervals covered 78.7--79.9\% of held-out off-market sales. Past market levels
+gave by far the largest gain; weighting recent sales more and ending the market windows at the last
+day of data kept the error nearly flat as the gap grows.
 
 \section{Data and features}
 We use only the competition files; no outside data. Every aggregate is computed from sales that
@@ -49,10 +49,12 @@ or below the neighbourhood average in sales \emph{before} the dev months: renova
 new systems (roof, furnace), finished basement, landscaped, dated, major repairs and motivated
 seller, as 0/1 columns, plus a net condition score. On pre-dev sales the score is monotonic:
 homes scored $-2$ sold 7\% below their neighbourhood's price per sq ft, homes scored $+3$ 9\% above.
-No remark contains a price, so the list price cannot leak into the off-market model through text.
+The features are fixed condition phrases and never read numbers. We also searched every remark in
+the training and both test files: none has a dollar sign, a price-like number or words such as
+``asking'' or ``reduced'', so the list price does not reach the off-market model through the text.
 
 \textbf{Market level.} Mean log price per sq ft of past sales by community $\times$ type
-(3/6/12 months), community, type and the whole city (1/3/12 months), with counts, momentum
+(3/6/12 months), community (3/12 months), type and the whole city (1/3/12 months), with counts, momentum
 (3 vs 12 months) and a naive estimate (neighbourhood price per sq ft $\times$ this home's size).
 
 \textbf{List-aware only.} Past mean log(sold/list) by community $\times$ type, community, type and city,
@@ -63,15 +65,19 @@ Both tracks use scikit-learn's \texttt{HistGradientBoostingRegressor}.
 \textbf{Off-market} learns log(price) with 1,500 trees (learning rate 0.03, 127 leaves, at least 50
 sales per leaf). \textbf{List-aware} learns log(sold/list), so the model only has to predict the
 discount or premium on a price the market already set, and multiplies back by the list price; it uses
-the default 100 trees, as larger ones overfit this weaker signal (Figure~\ref{fig:ablation}).
+scikit-learn's default 100 trees, as larger ones overfit this weaker signal. The default also
+holds out a random 10\% of training sales for early stopping; it never stopped early, and switching
+it off gave the same dev error (4.23\% vs 4.24\%).
 Both weight a sale half as much for every year it is older than the newest one.
 
-\textbf{Staleness.} Trees cannot extrapolate: a home listed in August 2026 looks to them like one listed
-in May. Training homes, however, always had market data up to the day before listing, while test homes
-have data that is 0--4 months old. We therefore give each training home a random cut-off 0--120 days
-before its listing, compute its market features from sales before that cut-off only, and tell the
-model how old its data is. The model learns from 2021--2025 how prices drift while data ages.
-At prediction time the windows end on the last day of data.
+\textbf{Data that ends before the sale.} Test homes are listed 0--4 months after our data ends, and
+trees cannot extrapolate. At prediction time the market windows end on the last day of data, so a
+September home sees the latest prices instead of empty windows, and the recency weights keep the model
+close to recent price levels. We also tried \emph{simulated staleness}: each training home gets a random
+cut-off 0--120 days before its listing, its market features use only sales before that cut-off, and a
+feature says how old its data is. It barely helped with small trees and, with the final trees, made
+off-market error worse (9.35\% instead of 9.19\%), so the off-market model does not use it. List-aware
+keeps it: its sale-to-list features were built with it, and we did not test it separately there.
 
 \begin{figure}[t]
 \centering
@@ -104,9 +110,11 @@ at it while developing \todo{run after freeze}.
 \texttt{\textbackslash input\{../reports/results\_table.tex\}} here, plus the same months at gaps 0--3.}
 
 Both models clear their baselines by about half (Table~\ref{tab:dev}). Error barely grows with the gap
-(off-market 9.21\% at $h{=}0$, 9.47\% at $h{=}3$; Figure~\ref{fig:design}b), which the staleness
-training was meant to achieve. The largest gains came from past market levels ($-3.0$ points) and
-larger trees ($-1.2$); Figure~\ref{fig:ablation} shows each step on its own.
+(off-market 8.99\% at $h{=}0$, 9.42\% at $h{=}3$; Figure~\ref{fig:design}b). The largest gains came
+from past market levels ($-3.0$ points) and larger trees ($-1.4$); Figure~\ref{fig:ablation} shows each
+step on its own. A $2\times2$ check (smaller trees) separates two ideas we first added together:
+recency weights lowered MdAPE by 0.16--0.21 points (0.29--0.33 at $h{=}3$), staleness training by
+only 0.03--0.05 (0.06--0.10 at $h{=}3$); with the final trees it hurt, so we removed it (Section~2).
 
 \begin{figure}[t]
 \centering
@@ -117,9 +125,10 @@ larger trees ($-1.2$); Figure~\ref{fig:ablation} shows each step on its own.
 
 \textbf{Uncertainty.} An 80\% (90\%) interval is the prediction times the 10th and 90th (5th and 95th)
 percentiles of past dev errors of homes of the same type and price third (split conformal).
-Calibrated on three dev months and checked on the other three, both ways round, the off-market
-80\% intervals covered 79.4\% and 79.5\% of sales (90\%: 89.9\%, 89.4\%), evenly across cheap, middle and
-expensive homes (79.5/80.0/78.8\%) and gaps (79.3--79.6\%). Without price thirds the dearest homes
+Calibrated on three dev months and checked on the other three, both ways round (we chose the price
+thirds on these same checks, so the final check is the independent test), the off-market
+80\% intervals covered 78.7\% and 79.9\% of sales (90\%: 89.2\%, 89.5\%), evenly across cheap, middle and
+expensive homes (79.6/79.8/78.5\%) and gaps (79.1--79.5\%). Without price thirds the dearest homes
 were covered only 72\%. List-aware coverage was 82.5\% and 76.2\%: it moves with the season (75--77\%
 in June--August), so its intervals may be a little narrow for a summer test. Median 80\% widths are
 35\% (off-market) and 16\% (list-aware) of the prediction; they are asymmetric because the models
@@ -135,22 +144,24 @@ past prices per sq ft were (communities with at least 100 dev predictions).}
 \end{figure}
 
 \textbf{Freehold houses.} Condos are valued within 8\%; detached and semi-detached homes within 11\%,
-freehold townhouses within 12.5\% (Figure~\ref{fig:fails}a). Houses differ in ways our columns do not
+freehold townhouses within 11.7\% (Figure~\ref{fig:fails}a). Houses differ in ways our columns do not
 record (lot shape, renovation quality, the street).
 \textbf{Mixed neighbourhoods.} A community's error tracks how spread out its past prices were
-(Spearman 0.43), much more than how many sales it had ($-0.15$). The worst, Maplepark (20.7\%), has one
+(Spearman 0.47), much more than how many sales it had ($-0.20$). The worst, Maplepark (18.8\%), has one
 of the widest spreads (Figure~\ref{fig:fails}b).
-\textbf{Expensive homes.} Off-market error rises from 7.5\% in the cheapest tenth of predictions to
+\textbf{Expensive homes.} Off-market error rises from 7.2\% in the cheapest tenth of predictions to
 13.5\% in the dearest. (By \emph{sold}-price decile the cheapest homes look overpriced by 10\% and the
-dearest underpriced by 5\%; that is regression to the mean, not a bias of the model.)
-\textbf{Not condition.} Error is flat across the remarks condition score (9.2--10.0\%), so the text
+dearest underpriced by 6\%. By \emph{predicted}-price decile the median signed error stays between
++2\% and +4.5\%, so that swing is mostly regression to the mean; the general overestimate remains,
+see Limitations.)
+\textbf{Not condition.} Error is flat across the remarks condition score (9.0--9.5\%), so the text
 features handle condition.
 \textbf{List-aware: unusual negotiations.} When a home sells between its list price and 10\% below,
 the error is 2.5--3.3\%; bidding wars and deep discounts push it to 6.6--7.2\%. Nothing in a listing
 predicts those.
 
 \section{Limitations}
-Both models still price high on the dev months (median signed error +2.8\% at $h{=}0$ to +4.3\% at
+Both models still price high on the dev months (median signed error +1.8\% at $h{=}0$ to +4.4\% at
 $h{=}3$ off-market, +0.9\% to +1.6\% list-aware), because prices kept falling through 2025.
 We tried correcting this with the bias measured on the last 120 days of training data. On the dev months it
 lowered MdAPE from 10.53\% to 10.38\% (tested before the final tuning), but at our final data end
@@ -169,7 +180,8 @@ None & & \\
 \end{tabular}
 
 \section*{Reproducing our results}
-From a fresh clone (Python 3.12, about 2 minutes; output is byte-identical on every run):\\
+From a fresh clone (Python 3.12, about 2 minutes). Random seeds are fixed and package versions pinned
+in \texttt{requirements.txt}; two runs from separate fresh clones on our machine gave byte-identical files.\\
 \texttt{python -m venv .venv \&\& .venv/bin/pip install -r requirements.txt}\\
 \texttt{.venv/bin/python -m pytest -q}\\
 \texttt{.venv/bin/python run.py predict \&\& .venv/bin/python run.py check}\\

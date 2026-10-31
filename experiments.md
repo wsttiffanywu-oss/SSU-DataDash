@@ -136,3 +136,23 @@ Test intervals: `outputs/test_intervals_{track}.csv`, calibrated on all dev mont
 - **Communities**: off-market MdAPE ranges 5.1%–20.7% (Maplepark). It tracks how mixed prices are in a community (Spearman 0.43 with the spread of log price/sqft) much more than how many sales it had (−0.15).
 - **List-aware**: errors are 2.5–3.3% when the sale lands between list and ~10% under list, and 6.6–7.2% when a home sells above list (bidding) or more than ~10% under it. Negotiation outcomes far from the usual are what it cannot see. (Grouped by the outcome itself, so diagnostic only.)
 - Horizon and month: off-market 9.0–9.6% across months; list-aware worst in June (4.6%).
+
+## Review follow-ups (2026-10-31, after a teammate's code review)
+
+| # | Date | Change | Track | Dev MdAPE | Dev MAPE | Final val touched? | Notes |
+|---|---|---|---|---|---|---|---|
+| 32 | 2026-10-31 | `past_window_mean` drops sales whose value is not finite before the cumulative sum (a NaN made every later window of its group NaN). New test `test_historical_mean_skips_invalid_values` fails on the old code, passes now. Boundary test: `>=` instead of `>` (window is [as_of − 365 d, as_of)) | both | — | — | No | Real data has no non-finite log_ppsf / log sale-to-list and no unparsable house_area, so features are unchanged: `run.py predict` gives the same bytes (off d218b44…, list befdb09… = la_hash.txt). 28 tests pass |
+| 33 | 2026-10-31 | `list_final_noes`: final list-aware model with `early_stopping=False`. The default (`"auto"`) holds out a random 10% of training rows; the final model ran all 100 iterations anyway, so it only lost 10% of its data | list | 4.23 | 5.31 | No | vs final 4.24 / 5.32; h0→h3 4.10→4.34, signed +1.24 — a tie. Not adopted for now (model frozen otherwise); report states the early stopping honestly |
+| 34 | 2026-10-31 | `anchor_hl365`: recency weights without staleness training, completing the 2×2 with #10–#12 (#12-sized trees) | off | 10.58 | 13.48 | No | see table below |
+
+2×2 of staleness training × recency weights (off-market, #12-sized trees, all with the anchored windows of #10):
+
+| | no recency weights | half-life 365 d |
+|---|---|---|
+| no staleness training | #10: 10.77 (h0 10.39, h3 11.17) | #34: 10.58 (h0 10.28, h3 10.88) |
+| staleness 0–120 d | #11: 10.74 (h0 10.34, h3 11.11) | #12: 10.53 (h0 10.29, h3 10.78) |
+
+Staleness training alone is worth only −0.03 to −0.05 overall (−0.06 to −0.10 at h=3); recency weights −0.16 to −0.21 (−0.29 to −0.33 at h=3). Most of the flat-horizon behaviour comes from the anchored windows (#10, −0.27) and recency weights, not from staleness training. The report's summary is corrected accordingly.
+| 35 | 2026-10-31 | `final_nostale`: the final off-market model (#19 trees, half-life 365) with staleness training off (windows still end at the last day of data, as in #10) | off | **9.19** | **11.94** | No | vs final 9.35 / 12.15: better at every horizon (h0→h3 8.99/9.16/9.22/9.42 vs 9.21/…/9.47) and less overestimate (signed +3.14 vs +3.54; h0 +1.83 → h3 +4.44). With large trees, staleness training costs accuracy. **Decision pending (Tiffany)**: dropping it is a simplification, but it is one more choice made on the dev months |
+
+**Frozen models (2026-10-31).** Off-market = #35 (no simulated staleness; `models.make_model`), list-aware = #24 unchanged. `python dev_validate.py final` reproduces 9.19 / 11.94 (off) and 4.24 / 5.32 (list) exactly. Refreshed with the new off-market dev predictions: intervals 80% coverage 78.7 / 79.9 (90%: 89.2 / 89.5), cheap/mid/expensive 79.6 / 79.8 / 78.5 (without price thirds 83.6 / 82.6 / 72.1), median test width 34.8%; error analysis: condos 7.7–7.8%, detached/semi 10.9–11.1%, freehold TH 11.7%, community spread Spearman 0.47 (sales −0.20), Maplepark 18.8%. List-aware numbers unchanged. Off-market submission file changed (a30b3f0…), list-aware identical (befdb09…). Final validation not yet run.

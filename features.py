@@ -43,7 +43,11 @@ def past_window_mean(homes, history, keys, days, value="log_ppsf"):
         past = past_groups.get(key)
         if past is None:
             continue
-        past = past.sort_values("date_sold")
+        # A missing value (e.g. an unparsable house_area) would turn every later cumulative sum
+        # into NaN, so drop such sales; they do not count towards n either.
+        past = past[np.isfinite(past[value])].sort_values("date_sold")
+        if past.empty:
+            continue
         dates = past["date_sold"].to_numpy()
         cumulative = np.concatenate([[0.0], np.cumsum(past[value].to_numpy())])
         as_of = rows["as_of"].to_numpy()

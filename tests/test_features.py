@@ -48,4 +48,23 @@ def test_homes_listed_after_the_data_ends_use_the_latest_data():
     home = history.iloc[[0]].assign(date_listed=last_sale + pd.Timedelta(days=60))
     X = features.market_features(home, history, max_staleness_days=120)
     assert X["staleness_days"].iloc[0] == 59
-    assert X["city_n_365d"].iloc[0] == (history["date_sold"] > last_sale - pd.Timedelta(days=364)).sum()
+    # Windows are [as_of - 365 days, as_of) with as_of = last sale + 1 day.
+    assert X["city_n_365d"].iloc[0] == (history["date_sold"] >= last_sale - pd.Timedelta(days=364)).sum()
+
+
+def test_historical_mean_skips_invalid_values():
+    history = make_listings(3)
+    history["date_sold"] = pd.to_datetime(["2025-01-10", "2025-01-20", "2025-01-25"])
+    history["community"] = "Testville"
+    history["house_type_name"] = "Condo Apt"
+    history["house_area"] = ["1000", None, "1000"]
+    history["sold_price"] = [100000.0, 200000.0, 300000.0]
+    home = make_listings(1, first_id=9999)
+    home["community"] = "Testville"
+    home["house_type_name"] = "Condo Apt"
+    home["date_listed"] = pd.Timestamp("2025-02-01")
+    home["house_area"] = "1000"
+    X = features.market_features(home, history)
+    # The sale with no usable area neither counts nor turns the mean into NaN.
+    assert X["ct_n_365d"].iloc[0] == 2
+    assert X["ct_ppsf_91d"].iloc[0] == pytest.approx(np.mean(np.log([100, 300])))

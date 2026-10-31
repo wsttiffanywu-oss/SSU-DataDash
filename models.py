@@ -25,8 +25,13 @@ def make_model(track):
         # Learns log(sold / list) from property, sale-to-list and list-vs-market features, recent
         # sales weighted more; default trees (bigger ones overfit). experiments.md #24.
         return FeatureModel(features.list_aware_features, half_life_days=365, relative_to_list=True)
-    # Market features with simulated staleness, recent sales weighted more (experiments.md #12, #19).
-    return FeatureModel(features.off_market_features, half_life_days=365, **OFF_MARKET_PARAMS)
+    # Market features ending at the listing date (or the last day of data), recent sales weighted
+    # more. No simulated staleness: with these trees it made dev error worse (experiments.md #35).
+    return FeatureModel(off_market_features, half_life_days=365, **OFF_MARKET_PARAMS)
+
+
+def off_market_features(homes, history, training=False):
+    return features.off_market_features(homes, history, training, max_staleness_days=0)
 
 
 def make_baseline(track):

@@ -72,11 +72,11 @@ def validation_design(baselines, final):
 
 def ablation():
     off = [("starter trees", 15.78), ("+ property features", 14.63), ("+ listing month", 14.55),
-           ("+ past market levels", 11.56), ("+ remarks phrases", 11.04), ("+ staleness, recency", 10.53),
-           ("+ larger trees", 9.35)]
+           ("+ past market levels", 11.56), ("+ remarks phrases", 11.04), ("+ windows end at data end", 10.77),
+           ("+ recency weights", 10.58), ("+ larger trees", 9.19)]
     lst = [("trees + list price", 4.71), ("+ target log(sold/list)", 4.68), ("+ past sale-to-list", 4.46),
            ("+ list vs market", 4.32), ("+ recency weights", 4.24)]
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.4))
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.5))
     for ax, steps, colour, ref, ref_label, title in [
             (axes[0], off, BLUE, 18.70, "pass line", "(a) Off-market"),
             (axes[1], lst, ORANGE, 7.09, "list price", "(b) List-aware")]:

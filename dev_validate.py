@@ -23,6 +23,11 @@ import models
 
 ROOT = Path(__file__).parent
 DEV_MONTHS = pd.period_range("2025-06", "2025-11", freq="M")
+# FINAL_CHECK=1 scores the official validation months instead, at the same horizons 0-3.
+# Run it once, after the models are frozen; never use it to choose anything.
+FINAL_CHECK = os.environ.get("FINAL_CHECK") == "1"
+if FINAL_CHECK:
+    DEV_MONTHS = pd.period_range("2025-12", "2026-05", freq="M")
 HORIZONS = [0, 1, 2, 3]
 # DEV_TRACKS=off_market python dev_validate.py ...  scores one track only (halves the run time).
 TRACKS = os.environ.get("DEV_TRACKS", "off_market,list_aware").split(",")
@@ -108,6 +113,12 @@ MODELS = {
     "stale120_nomonths": off_market_variant(drop=["months"]),
     "stale120_hl180": off_market_variant(half_life_days=180),
     "stale120_hl365_bc": off_market_variant(half_life_days=365, bias_correction_days=120),
+    # 2x2 check of staleness vs recency weights (completes anchor_only / stale120 / stale120_hl365).
+    "anchor_hl365": off_market_variant(half_life_days=365, max_staleness_days=0),
+    # The final off-market model with staleness training switched off.
+    "final_nostale": off_market_variant(half_life_days=365, max_staleness_days=0, **models.OFF_MARKET_PARAMS),
+    # The final list-aware model without sklearn's early stopping (which holds out a random 10%).
+    "list_final_noes": list_aware_variant(half_life_days=365, early_stopping=False),
     # Light tuning of the trees on top of #12 (no early stopping: it holds out a random 10%).
     "tune_a": off_market_variant(half_life_days=365, max_iter=300, learning_rate=0.05, early_stopping=False),
     "tune_b": off_market_variant(half_life_days=365, max_iter=600, learning_rate=0.05, max_leaf_nodes=63,
@@ -173,7 +184,8 @@ if __name__ == "__main__":
     listings = data.load("listings")
     results = pd.concat([evaluate(name, listings) for name in names])
     (ROOT / "outputs").mkdir(exist_ok=True)
-    results.to_csv(ROOT / "outputs" / f"dev_predictions_{'_'.join(names)}.csv", index=False)
+    prefix = "final_check" if FINAL_CHECK else "dev_predictions"
+    results.to_csv(ROOT / "outputs" / f"{prefix}_{'_'.join(names)}.csv", index=False)
     print(summarize(results).to_string())
     print("\nMedian signed error % by month:")
     print(signed_by_month(results).to_string())
