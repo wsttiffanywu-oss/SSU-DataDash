@@ -14,3 +14,11 @@ venv/
 .DS_Store
 .Rhistory
 report/*.pdf
+
+# Report: keep its figures (the line "figures/" above would hide them), not LaTeX build files
+!report/figures/
+report/*.aux
+report/*.log
+report/*.out
+report/*.fls
+report/*.fdb_latexmk

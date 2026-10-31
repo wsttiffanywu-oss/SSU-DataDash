@@ -11,6 +11,35 @@ Train on 150,000 sales (January 2021 to May 2026). Predict homes that sold June 
 **Data:** [huggingface.co/datasets/Baliyang/SSU_data_dash](https://huggingface.co/datasets/Baliyang/SSU_data_dash).
 All of it is synthetic.
 
+## Our models (team)
+
+Both tracks use gradient-boosted trees (`FeatureModel` in `models.py`) on features built only from
+sales that closed before each home was listed (`features.py`). Off-market learns log(price);
+list-aware learns log(sold / list). The experiment log, with every dev result and decision, is
+[`experiments.md`](experiments.md).
+
+Reproduce the two submission files from a fresh copy (Python 3.12, about 2 minutes):
+
+```
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pytest -q           # includes leakage checks on the features
+.venv/bin/python run.py predict         # writes submissions/ (deterministic: same bytes every run)
+.venv/bin/python run.py check
+```
+
+Our extra commands:
+
+```
+python dev_validate.py final   # dev validation: Jun-Nov 2025 at 0-3 month gaps (~15 min)
+python phase3.py intervals     # 80%/90% interval coverage on held-out dev months (needs the line above)
+python phase3.py errors        # error tables (reports/) and figures (figures/)
+python phase3.py test          # interval files for the test homes (after run.py predict)
+```
+
+Team rules: tune and select only with `dev_validate.py`; `run.py validate` (Dec 2025 - May 2026)
+is our final check and is run once, after the models are frozen. The off-market model never sees
+`list_price`. New aggregate features use only sales before the listing date and get a test.
+
 ## Setup
 
 Python 3.10 or newer (3.11+ on macOS 27):
