@@ -167,3 +167,5 @@ Staleness training alone is worth only −0.03 to −0.05 overall (−0.06 to �
 | | list | **4.13** | 5.23 | +0.04 | 4.17 / 4.12 / 4.11 / 4.11 |
 
 Close to the dev numbers (9.19 / 4.24); bars on these months 17.7 / 7.3. The 2025 overestimate vanished: off-market signed by month +4.46, +2.45, −0.74, −1.72, −1.58, −1.20 (spring 2026 rebound). Intervals calibrated on all dev months, applied once: 80% coverage 77.5% off (by month 79.5 → 76.1), 79.0% list; 90%: 88.0 / 89.2. Nothing was changed after seeing these numbers.
+
+Baselines on the final-check months (our runs, so the report does not rely on the handout's figures): pass line (`FINAL_CHECK=1 dev_validate.py passline`) MdAPE 17.87% at h=0, 17.99% over h=0–3 (MAPE 22.35); list price 7.26% (#0, `run.py validate`). The handout's 17.7% pass line comes from the organisers' own implementation; ours differs slightly (e.g. its fallback when a community has no same-type sale).

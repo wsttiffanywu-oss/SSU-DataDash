@@ -120,8 +120,9 @@ Gaps 0--3 months, as in the test & off-market & \textbf{8.98} & 11.54 & $-0.27$ 
 \bottomrule
 \end{tabular}
 \caption{Final check, December 2025--May 2026 (10,069 homes), run once after freezing. Official
-95\% bootstrap intervals for MdAPE: 8.47--8.88 (off-market), 4.06--4.26 (list-aware). The bars on the
-same months: 17.7\% (pass line) and 7.3\% (list price).}
+95\% bootstrap intervals for MdAPE: 8.47--8.88 (off-market), 4.06--4.26 (list-aware). Baselines on the
+same months, our runs: pass line 17.87\% (gap 0) and 17.99\% (gaps 0--3); list price 7.26\% (the
+handout's bars: 17.7\% and 7.3\%).}
 \label{tab:final}
 \end{table}
 
@@ -134,7 +135,7 @@ Both models clear their baselines by about half (Table~\ref{tab:dev}). Error bar
 (off-market 8.99\% at $h{=}0$, 9.42\% at $h{=}3$; Figure~\ref{fig:design}b). The largest gains came
 from past market levels ($-3.0$ points) and larger trees ($-1.4$); Figure~\ref{fig:ablation} shows each
 step on its own. A $2\times2$ check (smaller trees) separates two ideas we first added together:
-recency weights lowered MdAPE by 0.16--0.21 points (0.29--0.33 at $h{=}3$), staleness training by
+recency weights lowered MdAPE by 0.16--0.21 points, staleness training by
 only 0.03--0.05; with the final trees it hurt, so we removed it (Section~2).
 
 \begin{figure}[t]
