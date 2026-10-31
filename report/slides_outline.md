@@ -104,6 +104,6 @@ remark phrases. Only gradient-boosted trees.
 
 **On screen:**
 `pip install -r requirements.txt` · `pytest` · `python run.py predict` · `python run.py check`.
-Fixed seeds, pinned versions → byte-identical files. github.com/wsttiffanywu-oss/SSU-Data-Dash
+Fixed seeds, pinned versions → byte-identical files. github.com/wsttiffanywu-oss/SSU-DataDash
 
 **Image:** none (commands on screen), or a QR code to the repository.
