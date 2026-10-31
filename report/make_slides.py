@@ -222,14 +222,22 @@ def results(final):
 
     def md(frame, track, model=None):
         rows = frame[(frame["track"] == track) & ((frame["model"] == model) if model else True)]
-        return f"{rows['ape'].median():.2f}%"
+        return rows["ape"].median()
+    import data
+    listings = data.load("listings")
+    months = listings["date_sold"].dt.to_period("M").astype(str)
+
+    def list_price(first, last):   # the list-price baseline does not depend on the gap
+        homes = listings[(months >= first) & (months <= last)]
+        return (100 * (homes["list_price"] - homes["sold_price"]).abs() / homes["sold_price"]).median()
+    passline_check = load("final_check_passline.csv") if (ROOT / "outputs" / "final_check_passline.csv").exists() else None
     rows = [["", "Off-market", "List-aware"],
-            ["Baseline (dev months)", f"{md(baselines, 'off_market', 'passline')} (pass line)",
-             f"{md(baselines, 'list_aware', 'starter')} (list price)"],
-            ["Ours, dev months (Jun–Nov 2025)", md(final, "off_market"), md(final, "list_aware")],
-            ["Ours, final check (Dec 2025–May 2026)",
-             md(check, "off_market") if check is not None else "[pending]",
-             md(check, "list_aware") if check is not None else "[pending]"]]
+            ["Dev months (Jun–Nov 2025)",
+             f"{md(final, 'off_market'):.2f}%  vs {md(baselines, 'off_market', 'passline'):.2f}%",
+             f"{md(final, 'list_aware'):.2f}%  vs {list_price('2025-06', '2025-11'):.2f}%"],
+            ["Final check (Dec 2025–May 2026)",
+             f"{md(check, 'off_market'):.2f}%  vs {md(passline_check, 'off_market'):.2f}%" if check is not None else "[pending]",
+             f"{md(check, 'list_aware'):.2f}%  vs {list_price('2025-12', '2026-05'):.2f}%" if check is not None else "[pending]"]]
     ax = fig.add_axes([0.05, 0.3, 0.9, 0.46]); ax.axis("off")
     table = ax.table(cellText=rows, cellLoc="left", colWidths=[0.48, 0.26, 0.26], loc="center")
     table.auto_set_font_size(False); table.set_fontsize(18); table.scale(1, 3.2)
@@ -237,10 +245,11 @@ def results(final):
         cell.set_edgecolor("#dddcd6"); cell.set_linewidth(0.8)
         if r == 0:
             cell.set_text_props(weight="bold", color=INK); cell.set_facecolor("#f1f0eb")
-        if r >= 2 and c > 0:
+        if r >= 1 and c > 0:
             cell.set_text_props(weight="bold", color=BLUE if c == 1 else ORANGE)
-    fig.text(0.05, 0.14, "MdAPE: median of |predicted − sold| / sold, every home predicted with data ending "
-             "0–3 months earlier.", fontsize=15, color=MUTED)
+    fig.text(0.05, 0.17, "Ours vs the baseline on the same months: pass line (off-market) and list price (list-aware).\n"
+             "MdAPE, every home predicted with data ending 0–3 months earlier. Handout's bars: 17.7% / 7.3%.",
+             fontsize=15, color=MUTED)
     save(fig, "slide07a_results.png")
 
 
